@@ -12,7 +12,6 @@ defmodule Ueberauth.Strategy.Microsoft do
   def handle_request!(conn) do
     authorize_url =
       conn.params
-#      |> Map.put(:scope, scopes)
       |> Map.put(:redirect_uri, callback_url(conn))
       |> OAuth.authorize_url!(options(conn))
 
