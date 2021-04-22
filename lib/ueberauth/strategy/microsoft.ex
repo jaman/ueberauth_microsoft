@@ -1,6 +1,5 @@
 defmodule Ueberauth.Strategy.Microsoft do
   use Ueberauth.Strategy,
-    default_scope: "https://graph.microsoft.com/user.read openid email offline_access",
     uid_field: :id
 
   alias OAuth2.{Response, Error}
@@ -11,11 +10,6 @@ defmodule Ueberauth.Strategy.Microsoft do
   Handles initial request for Microsoft authentication.
   """
   def handle_request!(conn) do
-#    default_scopes = option(conn, :default_scope)
-#    extra_scopes = option(conn, :extra_scopes)
-
-#    scopes = "#{extra_scopes} #{default_scopes}"
-
     authorize_url =
       conn.params
 #      |> Map.put(:scope, scopes)
@@ -100,21 +94,14 @@ defmodule Ueberauth.Strategy.Microsoft do
 
   defp fetch_user(conn, client) do
     conn = put_private(conn, :ms_token, client.token)
-    path = "https://graph.microsoft.com/v1.0/me/"
+    [_, resp, _] = client.token.access_token
+                   |> String.split(".")
+    resp = resp
+           |> Base.decode64!()
+           |> Jason.decode!()
 
-    case OAuth2.Client.get(client, path) do
-      {:ok, %Response{status_code: 401}} ->
-        set_errors!(conn, [error("token", "unauthorized")])
+    put_private(conn, :ms_user, resp)
 
-      {:ok, %Response{status_code: status, body: response}} when status in 200..299 ->
-        put_private(conn, :ms_user, response)
-
-      {:error, %Response{body: %{"error" => %{"code" => code, "message" => reason}}}} ->
-        set_errors!(conn, [error(code, reason)])
-
-      {:error, %Error{reason: reason}} ->
-        set_errors!(conn, [error("OAuth2", reason)])
-    end
   end
 
   defp option(conn, key) do
