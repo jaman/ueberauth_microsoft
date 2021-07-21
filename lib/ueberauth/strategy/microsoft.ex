@@ -96,7 +96,7 @@ defmodule Ueberauth.Strategy.Microsoft do
     [_, resp, _] = client.token.access_token
                    |> String.split(".")
     resp = resp
-           |> Base.decode64!()
+           |> Base.decode64!(padding: false)
            |> Jason.decode!()
 
     put_private(conn, :ms_user, resp)
