@@ -10,12 +10,26 @@ defmodule Ueberauth.Strategy.Microsoft do
   Handles initial request for Microsoft authentication.
   """
   def handle_request!(conn) do
-    authorize_url =
-      conn.params
-      |> Map.put(:redirect_uri, callback_url(conn))
-      |> OAuth.authorize_url!(options(conn))
+#<<<<<<< HEAD
+#    authorize_url =
+#      conn.params
+#      |> Map.put(:redirect_uri, callback_url(conn))
+#      |> OAuth.authorize_url!(options(conn))
+#
+#    redirect!(conn, authorize_url)
+#=======
+    scopes = conn.params["scope"] || option(conn, :default_scope)
+    prompt = conn.params["prompt"] || option(conn, :prompt)
 
-    redirect!(conn, authorize_url)
+    params =
+      [scope: scopes, prompt: prompt]
+      |> with_scopes(:extra_scopes, conn)
+      |> with_state_param(conn)
+      |> with_param(:lc, conn)
+
+    opts = oauth_client_options_from_conn(conn)
+    redirect!(conn, Ueberauth.Strategy.Microsoft.OAuth.authorize_url!(params, opts))
+#>>>>>>> upstream/master
   end
 
   @doc """
@@ -35,6 +49,9 @@ defmodule Ueberauth.Strategy.Microsoft do
       _token ->
         fetch_user(conn, client)
     end
+  rescue
+    err in [Error] ->
+      set_errors!(conn, [error("OAuth2", err.reason)])
   end
 
   @doc false
@@ -60,11 +77,13 @@ defmodule Ueberauth.Strategy.Microsoft do
 
   def credentials(conn) do
     token = conn.private.ms_token
+    scope_string = token.other_params["scope"] || ""
+    scopes = String.split(scope_string, " ", trim: true)
 
     %Credentials{
       expires: token.expires_at != nil,
       expires_at: token.expires_at,
-      scopes: token.other_params["scope"],
+      scopes: scopes,
       token: token.access_token,
       refresh_token: token.refresh_token,
       token_type: token.token_type
@@ -103,11 +122,42 @@ defmodule Ueberauth.Strategy.Microsoft do
 
   end
 
+  defp with_scopes(opts, key, conn) do
+    if option(conn, key),
+      do: Keyword.put(opts, :scope, "#{Keyword.get(opts, :scope, "")} #{option(conn, key)}"),
+      else: opts
+  end
+
+  defp oauth_client_options_from_conn(conn) do
+    base_options = [redirect_uri: callback_url(conn)]
+    request_options = conn.private[:ueberauth_request_options].options
+
+    request_options =
+      Keyword.take(request_options, [
+        :tenant_id,
+        :client_id,
+        :client_secret,
+        :authorize_url,
+        :token_url,
+        :request_opts
+      ])
+
+    if nil in Keyword.values(request_options) do
+      base_options
+    else
+      request_options ++ base_options
+    end
+  end
+
   defp option(conn, key) do
     default = Keyword.get(default_options(), key)
 
     conn
     |> options
     |> Keyword.get(key, default)
+  end
+
+  defp with_param(opts, key, conn) do
+    if value = conn.params[to_string(key)], do: Keyword.put(opts, key, value), else: opts
   end
 end

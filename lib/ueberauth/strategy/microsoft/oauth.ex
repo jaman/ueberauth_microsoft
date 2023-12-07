@@ -6,13 +6,14 @@ defmodule Ueberauth.Strategy.Microsoft.OAuth do
   alias OAuth2.Strategy.AuthCode
 
   def client(opts \\ []) do
-    config = Application.get_env(:ueberauth, __MODULE__)
+    config = Application.get_env(:ueberauth, __MODULE__, [])
     json_library = Ueberauth.json_library()
 
     config
     |> defaults()
     |> Keyword.merge(config)
     |> Keyword.merge(opts)
+    |> generate_secret()
     |> Client.new()
     |> OAuth2.Client.put_serializer("application/json", json_library)
   end
@@ -52,5 +53,15 @@ defmodule Ueberauth.Strategy.Microsoft.OAuth do
       token_url: config[:token_url] || "https://login.microsoftonline.com/#{tenant_id}/oauth2/v2.0/token",
       request_opts: [ssl_options: [versions: [:"tlsv1.2"]]]
     ]
+  end
+
+  defp generate_secret(opts) do
+    if is_tuple(opts[:client_secret]) do
+      {module, fun} = opts[:client_secret]
+      secret = apply(module, fun, [opts])
+      Keyword.put(opts, :client_secret, secret)
+    else
+      opts
+    end
   end
 end
